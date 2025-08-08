@@ -41,13 +41,13 @@ ENV PORT=5000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --spider --timeout=2 --tries=1 http://localhost:3000/health || exit 1
+  CMD wget --spider --timeout=2 --tries=1 http://localhost:5000/health || exit 1
 
 # Switch to non-root user
 USER gateway
 
 # Expose port
-EXPOSE 3000
+EXPOSE 5000
 
 # Start application with dumb-init for proper signal handling
 ENTRYPOINT ["dumb-init", "--"]
