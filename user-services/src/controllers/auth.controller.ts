@@ -1,8 +1,8 @@
 // src/controllers/auth.controller.ts
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
-import User from '../models/user.model';
-import { catchAsync } from '../utils/catchAsync';
+import User from '../models/user.model.js';
+import { catchAsync } from '../utils/catchAsync.js';
 import { AppError } from '../utils/AppError.js';
 import { JWTService } from '../utils/jwtService.js';
 import { sendTokenResponse, clearRefreshTokenCookie } from '../middlewares/tokenRefresh.middleware.js';
