@@ -1,5 +1,5 @@
 {
-  "name": "chat-app-api-gateway",
+  "name": "api-gateway",
   "version": "1.0.0",
   "description": "Advanced API Gateway for Chat Application Microservices",
   "main": "dist/index.js",

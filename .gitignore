@@ -51,3 +51,6 @@ coverage/
 
 # S3 test uploads (if any)
 test-connection
+
+# Ignore specific files or directories
+docker-compose.dev.yml
