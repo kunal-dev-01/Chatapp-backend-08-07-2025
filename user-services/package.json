@@ -22,10 +22,13 @@
     "microservices",
     "nodejs",
     "express",
-    "mongoose"
+    "mongoose",
+    "cloudfront",
+    "aws s3"
   ],
   "author": "Kunal Singh",
   "license": "ISC",
+  "type" : "module",
   "dependencies": {
     "@aws-sdk/client-cloudfront": "^3.863.0",
     "@aws-sdk/client-s3": "^3.863.0",

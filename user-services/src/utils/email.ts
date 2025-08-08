@@ -2,6 +2,7 @@
 import { SESClient, SendEmailCommand, SESServiceException } from "@aws-sdk/client-ses";
 import fs from "fs/promises";
 import path from "path";
+import { fileURLToPath } from "url";
 import { AppError } from "./AppError";
 
 import {
@@ -15,6 +16,7 @@ import {
 
 
 // ES modules compatibility for __dirname
+const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // SES Configuration
