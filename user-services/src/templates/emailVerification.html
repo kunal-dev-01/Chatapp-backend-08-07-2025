@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Verify Your Email - {{appName}}</title>
+    <!--[if mso]>
+    <noscript>
+        <xml>
+            <o:OfficeDocumentSettings>
+                <o:PixelsPerInch>96</o:PixelsPerInch>
+            </o:OfficeDocumentSettings>
+        </xml>
+    </noscript>
+    <![endif]-->
+    <style>
+        /* Email-safe CSS only */
+        body, table, td, p, div {
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333333;
+            background-color: #f4f4f4;
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+        }
+
+        table {
+            border-collapse: collapse;
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+
+        .header-bg {
+            background-color: #6366f1;
+            padding: 30px 0;
+        }
+
+        .logo {
+            font-size: 32px;
+            font-weight: bold;
+            color: #ffffff;
+            text-align: center;
+            margin: 0;
+            letter-spacing: -0.5px;
+        }
+
+        .content-section {
+            padding: 40px 30px;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1f2937;
+            text-align: center;
+            margin: 0 0 10px 0;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            color: #6b7280;
+            text-align: center;
+            margin: 0 0 30px 0;
+        }
+
+        .content-text {
+            font-size: 16px;
+            color: #374151;
+            margin: 0 0 20px 0;
+            line-height: 1.6;
+        }
+
+        .button-section {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 15px 30px;
+            background-color: #6366f1;
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        .features-section {
+            background-color: #f8fafc;
+            padding: 25px;
+            margin: 25px 0;
+            border-radius: 8px;
+        }
+
+        .features-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #1f2937;
+            text-align: center;
+            margin: 0 0 15px 0;
+        }
+
+        .features-table {
+            width: 100%;
+        }
+
+        .feature-item {
+            font-size: 14px;
+            color: #4b5563;
+            padding: 5px 0;
+        }
+
+        .checkmark {
+            color: #10b981;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .alternative-section {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 8px;
+        }
+
+        .alternative-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #475569;
+            margin: 0 0 10px 0;
+        }
+
+        .alternative-link {
+            word-break: break-all;
+            color: #6366f1;
+            text-decoration: none;
+            font-size: 14px;
+            background-color: #f1f5f9;
+            padding: 10px;
+            border-radius: 4px;
+            display: block;
+            border: 1px solid #e2e8f0;
+        }
+
+        .warning-section {
+            background-color: #fef3c7;
+            border: 1px solid #f59e0b;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 8px;
+        }
+
+        .warning-title {
+            font-weight: bold;
+            color: #92400e;
+            margin: 0 0 5px 0;
+        }
+
+        .warning-text {
+            color: #92400e;
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .footer-section {
+            background-color: #f8fafc;
+            padding: 30px;
+            text-align: center;
+            border-top: 2px solid #e5e7eb;
+        }
+
+        .footer-brand {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1f2937;
+            margin: 0 0 10px 0;
+        }
+
+        .footer-text {
+            font-size: 14px;
+            color: #6b7280;
+            margin: 0 0 8px 0;
+        }
+
+        .footer-small {
+            font-size: 12px;
+            color: #9ca3af;
+            margin: 20px 0 0 0;
+        }
+
+        /* Mobile styles */
+        @media only screen and (max-width: 600px) {
+            .content-section {
+                padding: 25px 20px !important;
+            }
+            
+            .title {
+                font-size: 22px !important;
+            }
+
+            .button {
+                padding: 14px 25px !important;
+                font-size: 15px !important;
+                width: 90% !important;
+                display: block !important;
+            }
+
+            .features-table {
+                width: 100% !important;
+            }
+
+            .content-text {
+                font-size: 15px !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Outer table for email client compatibility -->
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f4f4f4;">
+        <tr>
+            <td align="center" style="padding: 20px 0;">
+                
+                <!-- Main container -->
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" class="container">
+                    
+                    <!-- Header -->
+                    <tr>
+                        <td class="header-bg">
+                            <h1 class="logo">Sova</h1>
+                        </td>
+                    </tr>
+                    
+                    <!-- Content -->
+                    <tr>
+                        <td class="content-section">
+                            <h2 class="title">Verify Your Email Address</h2>
+                            <p class="subtitle">Hi {{fullName}}, welcome aboard! 🚀</p>
+                            
+                            <p class="content-text">Thanks for joining {{appName}}! You're just one step away from accessing all the amazing features we have to offer.</p>
+                            
+                            <p class="content-text">To complete your registration and secure your account, please verify your email address by clicking the button below:</p>
+                            
+                            <!-- Button -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" class="button-section">
+                                <tr>
+                                    <td align="center">
+                                        <a href="{{verificationUrl}}" class="button" style="color: #ffffff; text-decoration: none;">
+                                            ✉️ Verify Email Address
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- Features -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" class="features-section">
+                                <tr>
+                                    <td>
+                                        <p class="features-title">What you'll get access to:</p>
+                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" class="features-table">
+                                            <tr>
+                                                <td class="feature-item" width="50%">
+                                                    <span class="checkmark">✓</span>Secure messaging
+                                                </td>
+                                                <td class="feature-item" width="50%">
+                                                    <span class="checkmark">✓</span>Real-time chat
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td class="feature-item">
+                                                    <span class="checkmark">✓</span>File sharing
+                                                </td>
+                                                <td class="feature-item">
+                                                    <span class="checkmark">✓</span>Group conversations
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td class="feature-item">
+                                                    <span class="checkmark">✓</span>Privacy controls
+                                                </td>
+                                                <td class="feature-item">
+                                                    <span class="checkmark">✓</span>24/7 support
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- Alternative link -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" class="alternative-section">
+                                <tr>
+                                    <td>
+                                        <p class="alternative-title">🔗 Alternative verification method:</p>
+                                        <p style="margin: 0 0 10px 0; font-size: 14px; color: #64748b;">If the button doesn't work, copy and paste this link into your browser:</p>
+                                        <a href="{{verificationUrl}}" class="alternative-link">{{verificationUrl}}</a>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- Warning -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" class="warning-section">
+                                <tr>
+                                    <td>
+                                        <p class="warning-title">⚠️ Security Notice</p>
+                                        <p class="warning-text">
+                                            This verification link will expire in <strong>24 hours</strong> for your security. If you didn't create an account with {{appName}}, please ignore this email and no further action is required.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td class="footer-section">
+                            <p class="footer-brand">{{appName}} Team</p>
+                            <p class="footer-text">We're excited to have you on board!</p>
+                            <p class="footer-text">Need help? Contact us anytime at support@{{appName}}.com</p>
+                            
+                            <p class="footer-small">
+                                This is an automated message. Please do not reply to this email.<br>
+                                © 2025 {{appName}}. All rights reserved.
+                            </p>
+                        </td>
+                    </tr>
+                    
+                </table>
+                
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
