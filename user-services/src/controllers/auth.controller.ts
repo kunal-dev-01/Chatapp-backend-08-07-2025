@@ -16,11 +16,6 @@ export const register = catchAsync(async (req: Request, res: Response, next: Nex
     return next(new AppError('All fields are required', 400));
   }
 
-  const validPassword = password.match(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{6,}$/);
-
-  if (!validPassword) {
-    return next(new AppError('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character', 400));
-  }
   if (password.length < 6) {
     return next(new AppError('Password must be at least 6 characters', 400));
   }
