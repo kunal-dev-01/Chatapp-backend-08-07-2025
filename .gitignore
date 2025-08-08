@@ -1,0 +1,53 @@
+# Node modules
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# dotenv files
+.env
+.env.*
+
+# TypeScript build outputs
+dist/
+build/
+tsconfig.tsbuildinfo
+
+# Optional npm cache directory
+.npm/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# AWS credentials (if any local file used — better use IAM roles/secrets manager)
+.aws/
+
+# Image uploads or temp files (if any)
+uploads/
+temp/
+tmp/
+
+# Coverage (for test reports)
+coverage/
+
+# S3 test uploads (if any)
+test-connection
