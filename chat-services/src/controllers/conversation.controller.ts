@@ -8,8 +8,9 @@ import { AppError } from '../utils/AppError.js';
 
 interface AuthenticatedRequest extends Request {
   user?: {
-    userId: string;
+    id: string;
     email: string;
+    username: string;
   };
 }
 
@@ -20,7 +21,7 @@ export class ConversationController {
   public static async createConversation(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { participants, conversationType, groupInfo } = req.body;
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
 
       if (!Array.isArray(participants) || participants.length > 50) {
         return next(new AppError('Participants array is required and must not exceed 50 users', 400));
@@ -144,7 +145,7 @@ export class ConversationController {
    */
   public static async getUserConversations(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
       const skip = (page - 1) * limit;
@@ -216,7 +217,7 @@ export class ConversationController {
   public static async getConversationDetails(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { conversationId } = req.params;
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
 
       const conversation = await ConversationModel.findById(conversationId)
         .populate('participants', 'name avatar email lastSeen')
@@ -269,7 +270,7 @@ export class ConversationController {
 
       const { conversationId } = req.params;
       const { name, description, avatar } = req.body;
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
 
       if (!conversationId) {
         return next(new AppError('Conversation ID is required', 400));
@@ -340,7 +341,7 @@ export class ConversationController {
 
       const { conversationId } = req.params;
       const { participantIds } = req.body;
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
 
       if (!conversationId) {
         return next(new AppError('Conversation ID is required', 400));
@@ -455,7 +456,7 @@ export class ConversationController {
     try {
 
       const { conversationId, participantId } = req.params;
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
 
       const conversation = await ConversationModel.findById(conversationId);
       if (!conversation) {
@@ -541,7 +542,7 @@ export class ConversationController {
   public static async toggleArchive(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { conversationId } = req.params;
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
 
       const conversation = await ConversationModel.findById(conversationId);
       if (!conversation) {
@@ -573,7 +574,7 @@ export class ConversationController {
   public static async toggleMute(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { conversationId } = req.params;
-      const userId = new Types.ObjectId(req.user!.userId);
+      const userId = new Types.ObjectId(req.user?.id);
 
       const conversation = await ConversationModel.findById(conversationId);
       if (!conversation) {
@@ -612,7 +613,7 @@ export class ConversationController {
   public static async togglePin(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { conversationId } = req.params;
-      const userId = new Types.ObjectId(req.user!.userId);
+      const userId = new Types.ObjectId(req.user?.id);
 
       const conversation = await ConversationModel.findById(conversationId);
       if (!conversation) {
@@ -651,7 +652,7 @@ export class ConversationController {
   public static async deleteConversation(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { conversationId } = req.params;
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
 
       const conversation = await ConversationModel.findById(conversationId);
       if (!conversation) {
@@ -709,7 +710,7 @@ export class ConversationController {
   public static async getTypingUsers(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { conversationId } = req.params;
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
 
       // Verify access
       const conversation = await ConversationModel.findById(conversationId);
