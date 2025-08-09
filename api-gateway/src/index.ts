@@ -1,4 +1,4 @@
-// src/index.ts
+// api-gateway/src/index.ts
 import express, { Request, Response, NextFunction } from "express";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import cors from "cors";
@@ -39,7 +39,7 @@ class APIGateway {
         name: "user-service",
         url: process.env.USER_SERVICE_URL || (isDocker ? "http://user-service:5001" : "http://localhost:5001"),
         path: "/api/v1/auth",
-        timeout: 30000, // Increased timeout
+        timeout: 30000,
       },
       {
         name: "user-service", 
@@ -290,11 +290,16 @@ class APIGateway {
         changeOrigin: true,
         timeout: service.timeout || 30000,
         proxyTimeout: service.timeout || 30000,
-        secure: false, // Allow self-signed certificates in development
+        secure: false,
         followRedirects: true,
-        pathRewrite: {
-          [`^${service.path}`]: "",
+        // 🔥 MAIN FIX: Correct pathRewrite configuration
+        pathRewrite: (path: string, _req: Request) => {
+          // Remove the base path and keep the rest
+          const newPath = path.replace(service.path, '/api/v1' + service.path.split('/api/v1')[1]);
+          console.log(`[PATH REWRITE] Original: ${path} -> Rewritten: ${newPath}`);
+          return newPath;
         },
+        
         onProxyReq: (proxyReq, req: Request) => {
           const clientIp = req.ip || req.socket?.remoteAddress || "unknown";
           

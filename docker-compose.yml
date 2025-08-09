@@ -1,0 +1,141 @@
+version: '3.8'
+
+services:
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+      target: ${NODE_ENV:-development}
+    container_name: ${COMPOSE_PROJECT_NAME:-chatapp}-api-gateway
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORT:-5000}:5000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=5000
+      - DOCKER_ENV=true
+      - USER_SERVICE_URL=${USER_SERVICE_URL}
+      - CHAT_SERVICE_URL=${CHAT_SERVICE_URL}
+      - NOTIFICATION_SERVICE_URL=${NOTIFICATION_SERVICE_URL}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - CORS_ORIGIN=${CORS_ORIGIN}
+    depends_on:
+      user-service:
+        condition: service_healthy
+    networks:
+      - chatapp-network
+    volumes:
+      - ./api-gateway:/app
+      - /app/node_modules
+      - /app/dist
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # User Service  
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: ${DOCKERFILE:-Dockerfile.dev}
+      target: ${NODE_ENV:-development}
+    container_name: ${COMPOSE_PROJECT_NAME:-chatapp}-user-service
+    restart: unless-stopped
+    ports:
+      - "${USER_SERVICE_PORT:-5001}:5001"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=5001
+      - DOCKER_ENV=true
+      - MONGO_URI=${MONGO_URI}
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN}
+      - CLOUDFRONT_DISTRIBUTION_ID=${CLOUDFRONT_DISTRIBUTION_ID}
+      - SES_REGION=${SES_REGION}
+      - FROM_EMAIL=${FROM_EMAIL}
+      - FROM_NAME=${FROM_NAME}
+      - CLIENT_URL=${FRONTEND_URL}
+      - FRONTEND_DOMAIN=localhost:3000
+    networks:
+      - chatapp-network
+    volumes:
+      - ./user-service:/app
+      - /app/node_modules
+      - /app/dist
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Chat Service
+  chat-service:
+    build:
+      context: ./chat-service
+      dockerfile: ${DOCKERFILE:-Dockerfile.dev}
+      target: ${NODE_ENV:-development}
+    container_name: ${COMPOSE_PROJECT_NAME:-chatapp}-chat-service
+    restart: unless-stopped
+    ports:
+      - "${CHAT_SERVICE_PORT:-5002}:5002"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=5002
+      - DOCKER_ENV=true
+      - MONGODB_URI=${CHAT_MONGO_URI}
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET=${JWT_ACCESS_SECRET}
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - JWT_ACCESS_EXPIRE=${JWT_ACCESS_EXPIRE}
+      - JWT_REFRESH_EXPIRE=${JWT_REFRESH_EXPIRE}
+      - USER_SERVICE_URL=${USER_SERVICE_URL}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN}
+      - UPLOAD_DIR=${UPLOAD_DIR}
+      - MAX_IMAGE_SIZE=${MAX_IMAGE_SIZE}
+      - MAX_VIDEO_SIZE=${MAX_VIDEO_SIZE}
+      - MAX_DOCUMENT_SIZE=${MAX_DOCUMENT_SIZE}
+    depends_on:
+      user-service:
+        condition: service_healthy
+    networks:
+      - chatapp-network
+    volumes:
+      - ./chat-service:/app
+      - /app/node_modules
+      - /app/dist
+      - chat_uploads:${UPLOAD_DIR}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5002/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+# Named Volumes
+volumes:
+  chat_uploads:
+    driver: local
+
+# Networks
+networks:
+  chatapp-network:
+    driver: bridge
+    name: ${NETWORK_NAME:-chatapp-network}
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

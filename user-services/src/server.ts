@@ -1,4 +1,4 @@
-// src/server.ts
+// user-servicessrc/server.ts
 import dotenv from "dotenv";
 import express, { Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";

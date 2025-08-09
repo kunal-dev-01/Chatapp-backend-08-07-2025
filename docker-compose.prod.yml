@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  api-gateway:
+    build:
+      target: production
+    command: node dist/index.js
+    environment:
+      - NODE_ENV=production
+    volumes: []
+    restart: always
+
+  user-service:
+    build:
+      target: production
+    command: node dist/server.js  
+    environment:
+      - NODE_ENV=production
+    volumes: []
+    restart: always
+
+  chat-service:
+    build:
+      target: production
+    command: node dist/server.js
+    environment:
+      - NODE_ENV=production  
+    volumes: []
+    restart: always
