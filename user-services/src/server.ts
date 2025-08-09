@@ -60,9 +60,13 @@ connectDB();
 
 // Import routes
 import authRouter from "./routes/auth.route.js";
+import userRouter from "./routes/user.route.js";
+import socialRouter from "./routes/social.route.js";
 
 // Setup routes
 app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/users', userRouter);
+app.use('/api/v1/social', socialRouter);
 
 // Health check endpoint - Enhanced for better monitoring
 app.get('/health', (req: Request, res: Response) => {
