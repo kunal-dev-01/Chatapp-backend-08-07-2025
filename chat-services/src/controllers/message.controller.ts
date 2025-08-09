@@ -1,7 +1,7 @@
 // services/chat-service/src/controllers/message.controller.ts
 import { Request, Response, NextFunction } from 'express';
 import { Types } from 'mongoose';
-import { MessageModel } from '../models/message.model.js';
+import { MessageModel, IMessage, IMediaFile } from '../models/message.model.js';
 import { ConversationModel } from '../models/conversation.model.js';
 import { MediaUploadService } from '../utils/mediaUploadService.js';
 import { MediaProcessor } from '../utils/mediaProcessor.js';
@@ -9,29 +9,76 @@ import { RedisService } from '../config/redis.js';
 import { AppError } from '../utils/AppError.js';
 import { MulterFile } from '../types/multerType.js';
 
-// Fixed interface - extends Request and overrides files property
+// Updated interface to match your middleware
 interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     email: string;
+    username: string;
+    role?: string;
   };
 }
 
-// Type for media file response
-interface ProcessedMediaFile {
-  originalName: string;
-  fileName: string;
-  mimeType: string;
+// Interface for request body types
+interface SendMessageBody {
+  conversationId: string;
+  content?: string;
+  messageType?: 'text' | 'image' | 'video' | 'document' | 'audio';
+  replyTo?: string;
+}
+
+interface EditMessageBody {
+  content: string;
+}
+
+interface DeleteMessageBody {
+  deleteFor: 'me' | 'everyone';
+}
+
+interface ReactionBody {
+  emoji: string;
+}
+
+interface ForwardMessageBody {
+  conversationIds: string[];
+}
+
+// Interface for query parameters
+interface MessageQueryParams {
+  page?: string;
+  limit?: string;
+  query?: string;
+  messageType?: 'text' | 'image' | 'video' | 'document' | 'audio';
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+// Type for media upload result
+interface MediaUploadResult {
+  key: string;
   size: number;
   url: string;
-  thumbnailUrl?: string | undefined;
+  thumbnailUrl?: string;
   metadata?: {
     width?: number;
     height?: number;
     duration?: number;
     format?: string;
   };
-  uploadedAt: Date;
+}
+
+// Type for processed media file (matching your model)
+type ProcessedMediaFile = IMediaFile;
+
+// Type for message aggregation result
+interface MessageStatsResult {
+  _id: null;
+  totalMessages: number;
+  textMessages: number;
+  imageMessages: number;
+  videoMessages: number;
+  documentMessages: number;
+  audioMessages: number;
 }
 
 export class MessageController {
@@ -40,10 +87,13 @@ export class MessageController {
    */
   public static async sendMessage(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-
-      const { conversationId, content, messageType, replyTo } = req.body;
+      const { conversationId, content, messageType, replyTo } = req.body as SendMessageBody;
       const senderId = req.user?.id as string;
-      const files = req.files as MulterFile[];
+      const files = req.files as MulterFile[] | undefined;
+
+      if (!conversationId) {
+        return next(new AppError('Conversation ID is required', 400));
+      }
 
       // Verify conversation exists and user is participant
       const conversation = await ConversationModel.findById(conversationId);
@@ -55,9 +105,22 @@ export class MessageController {
         return next(new AppError('You are not a participant in this conversation', 403));
       }
 
+      // Validate message content for text messages
+      if (messageType === 'text' || !messageType) {
+        if (!content || content.trim().length === 0) {
+          return next(new AppError('Message content is required for text messages', 400));
+        }
+        if (content.length > 4000) {
+          return next(new AppError('Message content cannot exceed 4000 characters', 400));
+        }
+      }
+
       // Handle media uploads if files are present
       let mediaFiles: ProcessedMediaFile[] = [];
       if (files && files.length > 0) {
+        if (files.length > 10) {
+          return next(new AppError('Cannot upload more than 10 files at once', 400));
+        }
         mediaFiles = await MessageController.processMediaFiles(files, conversationId, senderId);
       }
 
@@ -73,11 +136,14 @@ export class MessageController {
         }
       }
 
+      // Determine message type
+      const finalMessageType = messageType || (mediaFiles.length > 0 ? 'document' : 'text');
+
       // Create message
       const newMessage = new MessageModel({
         conversationId: new Types.ObjectId(conversationId),
         senderId: new Types.ObjectId(senderId),
-        messageType: messageType || 'text',
+        messageType: finalMessageType,
         content: content?.trim(),
         mediaFiles,
         replyTo: replyTo ? new Types.ObjectId(replyTo) : undefined,
@@ -97,15 +163,22 @@ export class MessageController {
       }
 
       // Update conversation
-      await ConversationModel.findByIdAndUpdate(conversationId, {
+      const updateData: Record<string, unknown> = {
         lastMessage: savedMessage._id,
         lastActivity: new Date(),
         $inc: { 
-          'metadata.totalMessages': 1,
-          ...(messageType === 'image' || messageType === 'video' ? { 'metadata.mediaCount': 1 } : {}),
-          ...(messageType === 'document' ? { 'metadata.fileCount': 1 } : {})
+          'metadata.totalMessages': 1
         }
-      });
+      };
+
+      // Update counters based on message type
+      if (finalMessageType === 'image' || finalMessageType === 'video') {
+        (updateData.$inc as Record<string, number>)['metadata.mediaCount'] = 1;
+      } else if (finalMessageType === 'document') {
+        (updateData.$inc as Record<string, number>)['metadata.fileCount'] = 1;
+      }
+
+      await ConversationModel.findByIdAndUpdate(conversationId, updateData);
 
       // Cache message in Redis
       await RedisService.cacheMessage(savedMessage._id.toString(), savedMessage.toObject());
@@ -138,9 +211,15 @@ export class MessageController {
     try {
       const { conversationId } = req.params;
       const userId = req.user?.id as string;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 50;
-      const skip = (page - 1) * limit;
+      const { page = '1', limit = '50' } = req.query as MessageQueryParams;
+      
+      const pageNum = parseInt(page) || 1;
+      const limitNum = Math.min(parseInt(limit) || 50, 100); // Max 100 messages per request
+      const skip = (pageNum - 1) * limitNum;
+
+      if (!conversationId) {
+        return next(new AppError('Conversation ID is required', 400));
+      }
 
       // Verify user is participant
       const conversation = await ConversationModel.findById(conversationId);
@@ -164,7 +243,7 @@ export class MessageController {
       .populate('replyTo')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit)
+      .limit(limitNum)
       .lean();
 
       // Get total count
@@ -177,18 +256,18 @@ export class MessageController {
       });
 
       // Mark messages as delivered for this user
-      await MessageController.markMessagesAsDelivered(conversationId as string, userId);
+      await MessageController.markMessagesAsDelivered(conversationId, userId);
 
       res.json({
         success: true,
         data: {
           messages: messages.reverse(), // Reverse to show oldest first
           pagination: {
-            currentPage: page,
-            totalPages: Math.ceil(totalMessages / limit),
+            currentPage: pageNum,
+            totalPages: Math.ceil(totalMessages / limitNum),
             totalMessages,
-            hasNextPage: page < Math.ceil(totalMessages / limit),
-            hasPrevPage: page > 1
+            hasNextPage: pageNum < Math.ceil(totalMessages / limitNum),
+            hasPrevPage: pageNum > 1
           }
         }
       });
@@ -204,19 +283,23 @@ export class MessageController {
   public static async editMessage(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { messageId } = req.params;
-      const { content } = req.body;
+      const { content } = req.body as EditMessageBody;
       const userId = req.user?.id;
 
-      if(!content) {
+      if (!messageId) {
+        return next(new AppError('Message ID is required', 400));
+      }
+
+      if (!content) {
         return next(new AppError('Message content is required', 400));
       }
 
-      if(content.trim().length === 0) {
+      if (content.trim().length === 0) {
         return next(new AppError('Message content cannot be empty', 400));
       }
 
-      if(content.length > 1000) {
-        return next(new AppError('Message content cannot be longer than 1000 characters', 400));
+      if (content.length > 4000) {
+        return next(new AppError('Message content cannot exceed 4000 characters', 400));
       }
 
       const message = await MessageModel.findById(messageId);
@@ -256,7 +339,7 @@ export class MessageController {
       await message.populate('senderId', 'name avatar email');
 
       // Update cache
-      await RedisService.cacheMessage(messageId as string, message.toObject());
+      await RedisService.cacheMessage(messageId, message.toObject());
 
       // Send real-time update
       const wsManager = req.app.locals.wsManager;
@@ -285,8 +368,12 @@ export class MessageController {
   public static async deleteMessage(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { messageId } = req.params;
-      const { deleteFor } = req.body; // 'me' or 'everyone'
+      const { deleteFor } = req.body as DeleteMessageBody;
       const userId = req.user?.id;
+
+      if (!messageId) {
+        return next(new AppError('Message ID is required', 400));
+      }
 
       if (!deleteFor || !['me', 'everyone'].includes(deleteFor)) {
         return next(new AppError('Delete for is required and must be "me" or "everyone"', 400));
@@ -312,13 +399,17 @@ export class MessageController {
         // Mark as deleted and clear content
         message.isDeleted = true;
         message.content = undefined;
-        message.mediaFiles = [];
 
-        // Delete media files from S3
+        // Delete media files from storage
         if (message.mediaFiles && message.mediaFiles.length > 0) {
           for (const mediaFile of message.mediaFiles) {
-            await MediaUploadService.deleteMediaFiles(mediaFile);
+            try {
+              await MediaUploadService.deleteMediaFiles(mediaFile);
+            } catch (error) {
+              console.error('Error deleting media file:', error);
+            }
           }
+          message.mediaFiles = [];
         }
       } else {
         // Delete for me only
@@ -363,14 +454,21 @@ export class MessageController {
   public static async toggleReaction(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { messageId } = req.params;
-      const { emoji } = req.body;
+      const { emoji } = req.body as ReactionBody;
       const userId = new Types.ObjectId(req.user?.id);
 
-      if (!emoji) {
+      if (!messageId) {
+        return next(new AppError('Message ID is required', 400));
+      }
+
+      if (!emoji || emoji.trim().length === 0) {
         return next(new AppError('Emoji is required', 400));
       }
 
-
+      // Basic emoji validation (you might want to use a proper emoji library)
+      if (emoji.length > 10) {
+        return next(new AppError('Invalid emoji format', 400));
+      }
 
       const message = await MessageModel.findById(messageId);
       if (!message) {
@@ -384,7 +482,7 @@ export class MessageController {
       }
 
       // Find existing reaction
-      let reactionIndex = message.reactions.findIndex(r => r.emoji === emoji);
+      const reactionIndex = message.reactions.findIndex(r => r.emoji === emoji);
       let action: 'add' | 'remove';
 
       if (reactionIndex === -1) {
@@ -396,7 +494,7 @@ export class MessageController {
         });
         action = 'add';
       } else {
-        const reaction = message.reactions[reactionIndex] as { emoji: string; users: Types.ObjectId[]; count: number; };
+        const reaction = message.reactions[reactionIndex];
         const userIndex = reaction.users.findIndex(id => id.equals(userId));
 
         if (userIndex === -1) {
@@ -457,9 +555,19 @@ export class MessageController {
       const { messageId } = req.params;
       const userId = req.user?.id;
 
+      if (!messageId) {
+        return next(new AppError('Message ID is required', 400));
+      }
+
       const message = await MessageModel.findById(messageId);
       if (!message) {
         return next(new AppError('Message not found', 404));
+      }
+
+      // Verify user is participant
+      const conversation = await ConversationModel.findById(message.conversationId);
+      if (!conversation?.participants.includes(new Types.ObjectId(userId))) {
+        return next(new AppError('Access denied', 403));
       }
 
       // Don't mark own messages as read
@@ -471,11 +579,14 @@ export class MessageController {
         return;
       }
 
-      // Add read timestamp if not already read
+      // Add read timestamp if not already read by this user
       const readTime = new Date();
-      if (!message.status.read.some(readDate => 
-        readDate.getTime() === readTime.getTime()
-      )) {
+      const alreadyRead = message.status.read.some(readDate => {
+        // Check if this user already read this message (within 1 second tolerance)
+        return Math.abs(readDate.getTime() - readTime.getTime()) < 1000;
+      });
+
+      if (!alreadyRead) {
         message.status.read.push(readTime);
         await message.save();
 
@@ -509,13 +620,20 @@ export class MessageController {
    */
   public static async forwardMessage(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-    
       const { messageId } = req.params;
-      const { conversationIds } = req.body;
+      const { conversationIds } = req.body as ForwardMessageBody;
       const userId = req.user?.id;
 
-      if (!conversationIds || !conversationIds.length) {
-        return next(new AppError('Conversation IDs are required', 400));
+      if (!messageId) {
+        return next(new AppError('Message ID is required', 400));
+      }
+
+      if (!conversationIds || !Array.isArray(conversationIds) || conversationIds.length === 0) {
+        return next(new AppError('Conversation IDs array is required', 400));
+      }
+
+      if (conversationIds.length > 10) {
+        return next(new AppError('Cannot forward to more than 10 conversations at once', 400));
       }
 
       const originalMessage = await MessageModel.findById(messageId);
@@ -527,56 +645,71 @@ export class MessageController {
         return next(new AppError('Cannot forward deleted message', 400));
       }
 
-      const forwardedMessages = [];
+      // Verify user has access to the original message
+      const originalConversation = await ConversationModel.findById(originalMessage.conversationId);
+      if (!originalConversation?.participants.includes(new Types.ObjectId(userId))) {
+        return next(new AppError('Access denied to original message', 403));
+      }
+
+      const forwardedMessages: IMessage[] = [];
 
       // Forward to each conversation
       for (const conversationId of conversationIds) {
-        const conversation = await ConversationModel.findById(conversationId);
-        if (!conversation) continue;
-
-        if (!conversation.participants.includes(new Types.ObjectId(userId))) {
-          continue; // Skip if not a participant
-        }
-
-        const forwardedMessage = new MessageModel({
-          conversationId: new Types.ObjectId(conversationId),
-          senderId: new Types.ObjectId(userId),
-          messageType: originalMessage.messageType,
-          content: originalMessage.content,
-          mediaFiles: originalMessage.mediaFiles,
-          forwarded: {
-            originalMessageId: originalMessage._id,
-            forwardedFrom: originalMessage.senderId,
-            forwardedAt: new Date()
-          },
-          status: {
-            sent: new Date(),
-            delivered: [],
-            read: []
+        try {
+          const conversation = await ConversationModel.findById(conversationId);
+          if (!conversation) {
+            console.warn(`Conversation ${conversationId} not found`);
+            continue;
           }
-        });
 
-        const savedMessage = await forwardedMessage.save();
-        await savedMessage.populate('senderId', 'name avatar email');
-        await savedMessage.populate('forwarded.forwardedFrom', 'name avatar email');
+          if (!conversation.participants.includes(new Types.ObjectId(userId))) {
+            console.warn(`User ${userId} not participant in conversation ${conversationId}`);
+            continue; // Skip if not a participant
+          }
 
-        forwardedMessages.push(savedMessage);
+          const forwardedMessage = new MessageModel({
+            conversationId: new Types.ObjectId(conversationId),
+            senderId: new Types.ObjectId(userId),
+            messageType: originalMessage.messageType,
+            content: originalMessage.content,
+            mediaFiles: originalMessage.mediaFiles,
+            forwarded: {
+              originalMessageId: originalMessage._id,
+              forwardedFrom: originalMessage.senderId,
+              forwardedAt: new Date()
+            },
+            status: {
+              sent: new Date(),
+              delivered: [],
+              read: []
+            }
+          });
 
-        // Update conversation
-        await ConversationModel.findByIdAndUpdate(conversationId, {
-          lastMessage: savedMessage._id,
-          lastActivity: new Date(),
-          $inc: { 'metadata.totalMessages': 1 }
-        });
+          const savedMessage = await forwardedMessage.save();
+          await savedMessage.populate('senderId', 'name avatar email');
+          await savedMessage.populate('forwarded.forwardedFrom', 'name avatar email');
 
-        // Send real-time notification
-        const wsManager = req.app.locals.wsManager;
-        if (wsManager) {
-          await wsManager.broadcastToConversation(conversationId, {
-            type: 'NEW_MESSAGE',
-            data: savedMessage,
-            timestamp: Date.now()
-          }, userId);
+          forwardedMessages.push(savedMessage);
+
+          // Update conversation
+          await ConversationModel.findByIdAndUpdate(conversationId, {
+            lastMessage: savedMessage._id,
+            lastActivity: new Date(),
+            $inc: { 'metadata.totalMessages': 1 }
+          });
+
+          // Send real-time notification
+          const wsManager = req.app.locals.wsManager;
+          if (wsManager) {
+            await wsManager.broadcastToConversation(conversationId, {
+              type: 'NEW_MESSAGE',
+              data: savedMessage,
+              timestamp: Date.now()
+            }, userId);
+          }
+        } catch (error) {
+          console.error(`Error forwarding to conversation ${conversationId}:`, error);
+          continue; // Continue with next conversation
         }
       }
 
@@ -600,10 +733,15 @@ export class MessageController {
   public static async searchMessages(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { conversationId } = req.params;
-      const { query, messageType, dateFrom, dateTo } = req.query;
+      const { query, messageType, dateFrom, dateTo, page = '1', limit = '20' } = req.query as MessageQueryParams;
       const userId = req.user?.id;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 20;
+
+      if (!conversationId) {
+        return next(new AppError('Conversation ID is required', 400));
+      }
+
+      const pageNum = parseInt(page) || 1;
+      const limitNum = Math.min(parseInt(limit) || 20, 50); // Max 50 for search
 
       // Verify access
       const conversation = await ConversationModel.findById(conversationId);
@@ -622,25 +760,35 @@ export class MessageController {
         deletedFor: { $ne: new Types.ObjectId(userId) }
       };
 
-      if (query) {
-        searchCriteria.content = { $regex: query, $options: 'i' };
+      if (query && query.trim().length > 0) {
+        searchCriteria.content = { $regex: query.trim(), $options: 'i' };
       }
 
-      if (messageType) {
+      if (messageType && ['text', 'image', 'video', 'document', 'audio'].includes(messageType)) {
         searchCriteria.messageType = messageType;
       }
 
       if (dateFrom || dateTo) {
         searchCriteria.createdAt = {};
-        if (dateFrom) (searchCriteria.createdAt as Record<string, unknown>).$gte = new Date(dateFrom as string);
-        if (dateTo) (searchCriteria.createdAt as Record<string, unknown>).$lte = new Date(dateTo as string);
+        if (dateFrom) {
+          const fromDate = new Date(dateFrom);
+          if (!isNaN(fromDate.getTime())) {
+            (searchCriteria.createdAt as Record<string, unknown>).$gte = fromDate;
+          }
+        }
+        if (dateTo) {
+          const toDate = new Date(dateTo);
+          if (!isNaN(toDate.getTime())) {
+            (searchCriteria.createdAt as Record<string, unknown>).$lte = toDate;
+          }
+        }
       }
 
       const messages = await MessageModel.find(searchCriteria)
         .populate('senderId', 'name avatar email')
         .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
         .lean();
 
       const totalResults = await MessageModel.countDocuments(searchCriteria);
@@ -650,11 +798,11 @@ export class MessageController {
         data: {
           messages,
           pagination: {
-            currentPage: page,
-            totalPages: Math.ceil(totalResults / limit),
+            currentPage: pageNum,
+            totalPages: Math.ceil(totalResults / limitNum),
             totalResults,
-            hasNextPage: page < Math.ceil(totalResults / limit),
-            hasPrevPage: page > 1
+            hasNextPage: pageNum < Math.ceil(totalResults / limitNum),
+            hasPrevPage: pageNum > 1
           }
         }
       });
@@ -671,6 +819,10 @@ export class MessageController {
     try {
       const { conversationId } = req.params;
       const userId = req.user?.id;
+
+      if (!conversationId) {
+        return next(new AppError('Conversation ID is required', 400));
+      }
 
       // Verify access
       const conversation = await ConversationModel.findById(conversationId);
@@ -712,15 +864,188 @@ export class MessageController {
         }
       ]);
 
+      const result = stats[0] as MessageStatsResult || {
+        _id: null,
+        totalMessages: 0,
+        textMessages: 0,
+        imageMessages: 0,
+        videoMessages: 0,
+        documentMessages: 0,
+        audioMessages: 0
+      };
+
       res.json({
         success: true,
-        data: stats[0] || {
-          totalMessages: 0,
-          textMessages: 0,
-          imageMessages: 0,
-          videoMessages: 0,
-          documentMessages: 0,
-          audioMessages: 0
+        data: {
+          totalMessages: result.totalMessages,
+          textMessages: result.textMessages,
+          imageMessages: result.imageMessages,
+          videoMessages: result.videoMessages,
+          documentMessages: result.documentMessages,
+          audioMessages: result.audioMessages
+        }
+      });
+
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Bulk mark messages as read for a conversation
+   */
+  public static async bulkMarkAsRead(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { conversationId } = req.params;
+      const userId = req.user?.id;
+
+      if (!conversationId) {
+        return next(new AppError('Conversation ID is required', 400));
+      }
+
+      // Verify access
+      const conversation = await ConversationModel.findById(conversationId);
+      if (!conversation) {
+        return next(new AppError('Conversation not found', 404));
+      }
+
+      if (!conversation.participants.includes(new Types.ObjectId(userId))) {
+        return next(new AppError('Access denied', 403));
+      }
+
+      // Mark all unread messages as read
+      const result = await MessageModel.updateMany(
+        {
+          conversationId: new Types.ObjectId(conversationId),
+          senderId: { $ne: new Types.ObjectId(userId) },
+          'status.read': { $size: 0 },
+          isDeleted: false,
+          deletedFor: { $ne: new Types.ObjectId(userId) }
+        },
+        {
+          $push: { 'status.read': new Date() }
+        }
+      );
+
+      res.json({
+        success: true,
+        message: 'Messages marked as read successfully',
+        data: {
+          markedCount: result.modifiedCount
+        }
+      });
+
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get unread message count for user
+   */
+  public static async getUnreadCount(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return next(new AppError('User ID is required', 400));
+      }
+
+      // Get all conversations where user is participant
+      const conversations = await ConversationModel.find({
+        participants: new Types.ObjectId(userId),
+        isArchived: false
+      }).select('_id');
+
+      const conversationIds = conversations.map(c => c._id);
+
+      // Get unread count for each conversation
+      const unreadCounts = await MessageModel.aggregate([
+        {
+          $match: {
+            conversationId: { $in: conversationIds },
+            senderId: { $ne: new Types.ObjectId(userId) },
+            'status.read': { $size: 0 },
+            isDeleted: false,
+            deletedFor: { $ne: new Types.ObjectId(userId) }
+          }
+        },
+        {
+          $group: {
+            _id: '$conversationId',
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+
+      const totalUnread = unreadCounts.reduce((total, item) => total + item.count, 0);
+
+      // Format response
+      const conversationUnreadMap = unreadCounts.reduce((acc, item) => {
+        acc[item._id.toString()] = item.count;
+        return acc;
+      }, {} as Record<string, number>);
+
+      res.json({
+        success: true,
+        data: {
+          totalUnread,
+          conversationUnreadCounts: conversationUnreadMap
+        }
+      });
+
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get message delivery status
+   */
+  public static async getMessageDeliveryStatus(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { messageId } = req.params;
+      const userId = req.user?.id;
+
+      if (!messageId) {
+        return next(new AppError('Message ID is required', 400));
+      }
+
+      const message = await MessageModel.findById(messageId)
+        .populate('senderId', 'name avatar email');
+
+      if (!message) {
+        return next(new AppError('Message not found', 404));
+      }
+
+      // Only sender can check delivery status
+      if (message.senderId._id.toString() !== userId) {
+        return next(new AppError('You can only check delivery status of your own messages', 403));
+      }
+
+      // Get conversation to count participants
+      const conversation = await ConversationModel.findById(message.conversationId);
+      if (!conversation) {
+        return next(new AppError('Conversation not found', 404));
+      }
+
+      const totalParticipants = conversation.participants.length - 1; // Exclude sender
+
+      res.json({
+        success: true,
+        data: {
+          messageId,
+          sent: message.status.sent,
+          delivered: {
+            count: message.status.delivered.length,
+            total: totalParticipants,
+            timestamps: message.status.delivered
+          },
+          read: {
+            count: message.status.read.length,
+            total: totalParticipants,
+            timestamps: message.status.read
+          }
         }
       });
 
@@ -732,12 +1057,16 @@ export class MessageController {
   /**
    * Private helper methods
    */
-  private static async processMediaFiles(files: MulterFile[], conversationId: string, userId: string): Promise<ProcessedMediaFile[]> {
+  private static async processMediaFiles(
+    files: MulterFile[], 
+    conversationId: string, 
+    userId: string
+  ): Promise<ProcessedMediaFile[]> {
     const mediaFiles: ProcessedMediaFile[] = [];
 
     for (const file of files) {
       try {
-        let uploadResult;
+        let uploadResult: MediaUploadResult;
 
         if (file.mimetype.startsWith('image/')) {
           MediaProcessor.validateMediaFile(file, 'image');
@@ -745,6 +1074,9 @@ export class MessageController {
         } else if (file.mimetype.startsWith('video/')) {
           MediaProcessor.validateMediaFile(file, 'video');
           uploadResult = await MediaUploadService.uploadVideo(file, conversationId, userId);
+        } else if (file.mimetype.startsWith('audio/')) {
+          MediaProcessor.validateMediaFile(file, 'audio');
+          uploadResult = await MediaUploadService.uploadAudio(file, conversationId, userId);
         } else {
           MediaProcessor.validateMediaFile(file, 'document');
           uploadResult = await MediaUploadService.uploadDocument(file, conversationId, userId);
@@ -759,7 +1091,7 @@ export class MessageController {
           thumbnailUrl: uploadResult.thumbnailUrl,
           metadata: uploadResult.metadata,
           uploadedAt: new Date()
-        }) ;
+        });
 
       } catch (error) {
         console.error('Media processing error:', error);
@@ -774,7 +1106,7 @@ export class MessageController {
     try {
       await MessageModel.updateMany(
         {
-          conversationId,
+          conversationId: new Types.ObjectId(conversationId),
           senderId: { $ne: new Types.ObjectId(userId) },
           'status.delivered': { $size: 0 }
         },
