@@ -1082,17 +1082,6 @@ export class MessageController {
           uploadResult = await MediaUploadService.uploadDocument(file, conversationId, userId);
         }
 
-        mediaFiles.push({
-          originalName: file.originalname,
-          fileName: uploadResult.key,
-          mimeType: file.mimetype,
-          size: uploadResult.size,
-          url: uploadResult.url,
-          thumbnailUrl: uploadResult.thumbnailUrl,
-          metadata: uploadResult.metadata,
-          uploadedAt: new Date()
-        });
-
       } catch (error) {
         console.error('Media processing error:', error);
         throw new AppError(`Failed to process file: ${file.originalname}`, 400);

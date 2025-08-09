@@ -23,11 +23,20 @@ export interface ProcessedVideo {
   size: number;
 }
 
+export interface ProcessedAudio {
+  audioBuffer: Buffer;
+  duration: number;
+  size: number;
+  format: string;
+  bitrate?: number;
+}
+
 export class MediaProcessor {
   private static readonly TEMP_DIR = '/tmp/chat-media';
   private static readonly MAX_IMAGE_DIMENSION = 1920;
   private static readonly MAX_VIDEO_DIMENSION = 1280;
   private static readonly VIDEO_BITRATE = '1000k';
+  private static readonly AUDIO_BITRATE = '128k';
   private static readonly THUMBNAIL_SIZE = 320;
 
   /**
@@ -160,6 +169,63 @@ export class MediaProcessor {
   }
 
   /**
+   * Process audio with FFmpeg - compress and normalize
+   */
+  public static async processAudio(file: MulterFile): Promise<ProcessedAudio> {
+    try {
+      await this.ensureTempDir();
+
+      const inputPath = path.join(this.TEMP_DIR, `input-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${this.getFileExtension(file.originalname)}`);
+      const outputPath = path.join(this.TEMP_DIR, `output-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.mp3`);
+
+      // Write input file
+      await fs.writeFile(inputPath, file.buffer);
+
+      try {
+        // Get audio metadata
+        const metadata = await this.getAudioMetadata(inputPath);
+
+        // Process audio
+        await new Promise<void>((resolve, reject) => {
+          ffmpeg(inputPath)
+            .output(outputPath)
+            .audioCodec('mp3')
+            .audioBitrate(this.AUDIO_BITRATE)
+            .audioChannels(2) // Stereo
+            .audioFrequency(44100) // Standard sample rate
+            .format('mp3')
+            .outputOptions([
+              '-write_id3v2 1',
+              '-id3v2_version 3'
+            ])
+            .on('end', resolve as () => void)
+            .on('error', reject)
+            .run();
+        });
+
+        // Read processed audio
+        const audioBuffer = await fs.readFile(outputPath);
+
+        return {
+          audioBuffer,
+          duration: metadata.duration,
+          size: audioBuffer.length,
+          format: 'mp3',
+          bitrate: parseInt(this.AUDIO_BITRATE.replace('k', ''))
+        };
+
+      } finally {
+        // Cleanup temp files
+        await this.cleanupFiles([inputPath, outputPath]);
+      }
+
+    } catch (error) {
+      console.error('Audio processing error:', error);
+      throw new AppError('Failed to process audio', 500);
+    }
+  }
+
+  /**
    * Generate video thumbnail only
    */
   public static async generateVideoThumbnail(file: MulterFile): Promise<Buffer> {
@@ -204,7 +270,7 @@ export class MediaProcessor {
   /**
    * Validate media file
    */
-  public static validateMediaFile(file: MulterFile, type: 'image' | 'video' | 'document'): void {
+  public static validateMediaFile(file: MulterFile, type: 'image' | 'video' | 'document' | 'audio'): void {
     const limits = {
       image: {
         maxSize: 10 * 1024 * 1024, // 10MB
@@ -214,20 +280,28 @@ export class MediaProcessor {
         maxSize: 100 * 1024 * 1024, // 100MB  
         types: ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm']
       },
+      audio: {
+        maxSize: 25 * 1024 * 1024, // 25MB
+        types: ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/aac', 'audio/x-m4a', 'audio/mp4']
+      },
       document: {
         maxSize: 50 * 1024 * 1024, // 50MB
-        types: ['application/pdf', 'application/msword', 'text/plain']
+        types: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']
       }
     };
 
     const limit = limits[type];
     
+    if (!limit) {
+      throw new AppError(`Unsupported file type: ${type}`, 400);
+    }
+
     if (file.size > limit.maxSize) {
       throw new AppError(`${type} size cannot exceed ${limit.maxSize / 1024 / 1024}MB`, 400);
     }
 
     if (!limit.types.includes(file.mimetype)) {
-      throw new AppError(`Invalid ${type} format`, 400);
+      throw new AppError(`Invalid ${type} format. Supported formats: ${limit.types.join(', ')}`, 400);
     }
   }
 
@@ -297,6 +371,31 @@ export class MediaProcessor {
     });
   }
 
+  private static async getAudioMetadata(filePath: string): Promise<{ duration: number; bitrate?: number }> {
+    return new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(filePath, (err, metadata) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        const audioStream = metadata.streams.find(stream => stream.codec_type === 'audio');
+        if (!audioStream) {
+          reject(new Error('No audio stream found'));
+          return;
+        }
+
+        const result: { duration: number; bitrate?: number } = {
+          duration: metadata.format.duration || 0
+        };
+        if (typeof audioStream.bit_rate === 'number') {
+          result.bitrate = Math.round(audioStream.bit_rate / 1000);
+        }
+        resolve(result);
+      });
+    });
+  }
+
   private static async ensureTempDir(): Promise<void> {
     try {
       await fs.access(this.TEMP_DIR);
@@ -338,6 +437,12 @@ export class MediaProcessor {
         maxSize: '100MB',
         maxDimension: this.MAX_VIDEO_DIMENSION,
         thumbnailFormat: 'webp'
+      },
+      audios: {
+        input: ['mp3', 'wav', 'ogg', 'aac', 'm4a'],
+        output: 'mp3',
+        maxSize: '25MB',
+        bitrate: this.AUDIO_BITRATE
       }
     };
   }

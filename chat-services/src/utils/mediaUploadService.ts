@@ -1,13 +1,6 @@
 // services/chat-service/src/utils/mediaUploadService.ts
-import {
-  PutObjectCommand,
-  DeleteObjectCommand,
-} from "@aws-sdk/client-s3";
-import {
-  s3Client,
-  s3Config,
-  generateCloudFrontUrl,
-} from "../config/aws.js";
+import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { s3Client, s3Config, generateCloudFrontUrl } from "../config/aws.js";
 import { MediaProcessor } from "./mediaProcessor.js";
 import { AppError } from "./AppError.js";
 import { IMediaFile } from "../models/message.model.js";
@@ -38,9 +31,13 @@ export class MediaUploadService {
   ): Promise<UploadResult> {
     try {
       const processedImage = await MediaProcessor.processImage(file);
-      
-      const key = this.generateImageKey(conversationId, userId, processedImage.format);
-      
+
+      const key = this.generateImageKey(
+        conversationId,
+        userId,
+        processedImage.format
+      );
+
       const uploadCommand = new PutObjectCommand({
         Bucket: s3Config.bucketName,
         Key: key,
@@ -66,12 +63,12 @@ export class MediaUploadService {
         metadata: {
           width: processedImage.width,
           height: processedImage.height,
-          format: processedImage.format
-        }
+          format: processedImage.format,
+        },
       };
     } catch (error) {
-      console.error('Image upload error:', error);
-      throw new AppError('Failed to upload image', 500);
+      console.error("Image upload error:", error);
+      throw new AppError("Failed to upload image", 500);
     }
   }
 
@@ -85,7 +82,7 @@ export class MediaUploadService {
   ): Promise<UploadResult> {
     try {
       const processedVideo = await MediaProcessor.processVideo(file);
-      
+
       const videoKey = this.generateVideoKey(conversationId, userId);
       const thumbnailKey = this.generateThumbnailKey(conversationId, userId);
 
@@ -117,14 +114,14 @@ export class MediaUploadService {
         Metadata: {
           conversationId,
           userId,
-          type: 'video-thumbnail',
+          type: "video-thumbnail",
           processedAt: new Date().toISOString(),
         },
       });
 
       await Promise.all([
         s3Client.send(videoUploadCommand),
-        s3Client.send(thumbnailUploadCommand)
+        s3Client.send(thumbnailUploadCommand),
       ]);
 
       return {
@@ -137,12 +134,12 @@ export class MediaUploadService {
           width: processedVideo.width,
           height: processedVideo.height,
           duration: processedVideo.duration,
-          format: 'mp4'
-        }
+          format: "mp4",
+        },
       };
     } catch (error) {
-      console.error('Video upload error:', error);
-      throw new AppError('Failed to upload video', 500);
+      console.error("Video upload error:", error);
+      throw new AppError("Failed to upload video", 500);
     }
   }
 
@@ -157,9 +154,13 @@ export class MediaUploadService {
     try {
       // Validate file type and size
       this.validateDocument(file);
-      
-      const key = this.generateDocumentKey(conversationId, userId, file.originalname);
-      
+
+      const key = this.generateDocumentKey(
+        conversationId,
+        userId,
+        file.originalname
+      );
+
       const uploadCommand = new PutObjectCommand({
         Bucket: s3Config.bucketName,
         Key: key,
@@ -182,13 +183,70 @@ export class MediaUploadService {
         key,
         size: file.size,
         metadata: {
-          format: file.mimetype
-        }
+          format: file.mimetype,
+        },
       };
     } catch (error) {
-      console.error('Document upload error:', error);
-      throw new AppError('Failed to upload document', 500);
+      console.error("Document upload error:", error);
+      throw new AppError("Failed to upload document", 500);
     }
+  }
+
+  public static async uploadAudio(
+    file: MulterFile,
+    conversationId: string,
+    userId: string
+  ): Promise<UploadResult> {
+    try {
+      const processedAudio = await MediaProcessor.processAudio(file);
+
+      const key = this.generateAudioKey(
+        conversationId,
+        userId,
+        processedAudio.format
+      );
+
+      const uploadCommand = new PutObjectCommand({
+        Bucket: s3Config.bucketName,
+        Key: key,
+        Body: processedAudio.audioBuffer,
+        ContentType: `audio/${processedAudio.format}`,
+        CacheControl: "max-age=31536000",
+        Metadata: {
+          conversationId,
+          userId,
+          originalFormat: file.mimetype,
+          processedAt: new Date().toISOString(),
+          duration: processedAudio.duration.toString(),
+          bitrate: processedAudio.bitrate?.toString() || "",
+        },
+      });
+
+      await s3Client.send(uploadCommand);
+
+      return {
+        url: generateCloudFrontUrl(key),
+        key,
+        size: processedAudio.size,
+        metadata: {
+          duration: processedAudio.duration,
+          format: processedAudio.format,
+        },
+      };
+    } catch (error) {
+      console.error("Audio upload error:", error);
+      throw new AppError("Failed to upload audio", 500);
+    }
+  }
+
+  private static generateAudioKey(
+    conversationId: string,
+    userId: string,
+    format: string
+  ): string {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+    return `chat/audio/${conversationId}/${userId}/${timestamp}-${random}.${format}`;
   }
 
   /**
@@ -216,7 +274,7 @@ export class MediaUploadService {
 
       await Promise.all(deletePromises);
     } catch (error) {
-      console.error('Media deletion error:', error);
+      console.error("Media deletion error:", error);
       // Don't throw error to avoid breaking main flow
     }
   }
@@ -224,29 +282,45 @@ export class MediaUploadService {
   /**
    * Generate unique keys for different file types
    */
-  private static generateImageKey(conversationId: string, userId: string, format: string): string {
+  private static generateImageKey(
+    conversationId: string,
+    userId: string,
+    format: string
+  ): string {
     const timestamp = Date.now();
     const random = Math.random().toString(36).substring(2, 8);
     return `chat/images/${conversationId}/${userId}/${timestamp}-${random}.${format}`;
   }
 
-  private static generateVideoKey(conversationId: string, userId: string): string {
+  private static generateVideoKey(
+    conversationId: string,
+    userId: string
+  ): string {
     const timestamp = Date.now();
     const random = Math.random().toString(36).substring(2, 8);
     return `chat/videos/${conversationId}/${userId}/${timestamp}-${random}.mp4`;
   }
 
-  private static generateThumbnailKey(conversationId: string, userId: string): string {
+  private static generateThumbnailKey(
+    conversationId: string,
+    userId: string
+  ): string {
     const timestamp = Date.now();
     const random = Math.random().toString(36).substring(2, 8);
     return `chat/thumbnails/${conversationId}/${userId}/${timestamp}-${random}.webp`;
   }
 
-  private static generateDocumentKey(conversationId: string, userId: string, originalName: string): string {
+  private static generateDocumentKey(
+    conversationId: string,
+    userId: string,
+    originalName: string
+  ): string {
     const timestamp = Date.now();
     const random = Math.random().toString(36).substring(2, 8);
-    const extension = originalName.split('.').pop();
-    const baseName = originalName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9]/g, '-');
+    const extension = originalName.split(".").pop();
+    const baseName = originalName
+      .replace(/\.[^/.]+$/, "")
+      .replace(/[^a-zA-Z0-9]/g, "-");
     return `chat/documents/${conversationId}/${userId}/${timestamp}-${random}-${baseName}.${extension}`;
   }
 
@@ -256,24 +330,24 @@ export class MediaUploadService {
   private static validateDocument(file: MulterFile): void {
     const maxSize = 50 * 1024 * 1024; // 50MB
     const allowedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-powerpoint',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'text/plain',
-      'application/zip',
-      'application/x-rar-compressed'
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "text/plain",
+      "application/zip",
+      "application/x-rar-compressed",
     ];
 
     if (file.size > maxSize) {
-      throw new AppError('Document size cannot exceed 50MB', 400);
+      throw new AppError("Document size cannot exceed 50MB", 400);
     }
 
     if (!allowedTypes.includes(file.mimetype)) {
-      throw new AppError('Invalid document type', 400);
+      throw new AppError("Invalid document type", 400);
     }
   }
 
@@ -301,24 +375,28 @@ export class MediaUploadService {
    * Get upload limits for different file types
    */
   public static getUploadLimits() {
-    return {
-      image: {
-        maxSize: 10 * 1024 * 1024, // 10MB
-        formats: ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-      },
-      video: {
-        maxSize: 100 * 1024 * 1024, // 100MB
-        formats: ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm']
-      },
-      document: {
-        maxSize: 50 * 1024 * 1024, // 50MB
-        formats: [
-          'application/pdf',
-          'application/msword',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'text/plain'
-        ]
-      }
-    };
-  }
+  return {
+    image: {
+      maxSize: 10 * 1024 * 1024, // 10MB
+      formats: ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    },
+    video: {
+      maxSize: 100 * 1024 * 1024, // 100MB
+      formats: ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm']
+    },
+    audio: {
+      maxSize: 25 * 1024 * 1024, // 25MB
+      formats: ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/aac', 'audio/x-m4a', 'audio/mp4']
+    },
+    document: {
+      maxSize: 50 * 1024 * 1024, // 50MB
+      formats: [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'text/plain'
+      ]
+    }
+  };
+}
 }
