@@ -10,10 +10,9 @@ import { AppError } from '../utils/AppError.js';
 import { MulterFile } from '../types/multerType.js';
 
 // Fixed interface - extends Request and overrides files property
-interface AuthenticatedRequest extends Omit<Request, 'files'> {
-  files?: MulterFile[];
+interface AuthenticatedRequest extends Request {
   user?: {
-    userId: string;
+    id: string;
     email: string;
   };
 }
@@ -43,8 +42,8 @@ export class MessageController {
     try {
 
       const { conversationId, content, messageType, replyTo } = req.body;
-      const senderId = req.user!.userId;
-      const files = req.files || [];
+      const senderId = req.user?.id as string;
+      const files = req.files as MulterFile[];
 
       // Verify conversation exists and user is participant
       const conversation = await ConversationModel.findById(conversationId);
@@ -138,7 +137,7 @@ export class MessageController {
   public static async getMessages(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { conversationId } = req.params;
-      const userId = req.user!.userId;
+      const userId = req.user?.id as string;
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
       const skip = (page - 1) * limit;
@@ -206,9 +205,22 @@ export class MessageController {
     try {
       const { messageId } = req.params;
       const { content } = req.body;
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
+
+      if(!content) {
+        return next(new AppError('Message content is required', 400));
+      }
+
+      if(content.trim().length === 0) {
+        return next(new AppError('Message content cannot be empty', 400));
+      }
+
+      if(content.length > 1000) {
+        return next(new AppError('Message content cannot be longer than 1000 characters', 400));
+      }
 
       const message = await MessageModel.findById(messageId);
+
       if (!message) {
         return next(new AppError('Message not found', 404));
       }
@@ -274,7 +286,11 @@ export class MessageController {
     try {
       const { messageId } = req.params;
       const { deleteFor } = req.body; // 'me' or 'everyone'
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
+
+      if (!deleteFor || !['me', 'everyone'].includes(deleteFor)) {
+        return next(new AppError('Delete for is required and must be "me" or "everyone"', 400));
+      }
 
       const message = await MessageModel.findById(messageId);
       if (!message) {
@@ -348,7 +364,13 @@ export class MessageController {
     try {
       const { messageId } = req.params;
       const { emoji } = req.body;
-      const userId = new Types.ObjectId(req.user!.userId);
+      const userId = new Types.ObjectId(req.user?.id);
+
+      if (!emoji) {
+        return next(new AppError('Emoji is required', 400));
+      }
+
+
 
       const message = await MessageModel.findById(messageId);
       if (!message) {
@@ -406,7 +428,7 @@ export class MessageController {
             messageId,
             emoji,
             action,
-            userId: req.user!.userId,
+            userId: req.user?.id,
             reactions: message.reactions
           },
           timestamp: Date.now()
@@ -433,7 +455,7 @@ export class MessageController {
   public static async markAsRead(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { messageId } = req.params;
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
 
       const message = await MessageModel.findById(messageId);
       if (!message) {
@@ -490,7 +512,11 @@ export class MessageController {
     
       const { messageId } = req.params;
       const { conversationIds } = req.body;
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
+
+      if (!conversationIds || !conversationIds.length) {
+        return next(new AppError('Conversation IDs are required', 400));
+      }
 
       const originalMessage = await MessageModel.findById(messageId);
       if (!originalMessage) {
@@ -575,7 +601,7 @@ export class MessageController {
     try {
       const { conversationId } = req.params;
       const { query, messageType, dateFrom, dateTo } = req.query;
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
 
@@ -644,7 +670,7 @@ export class MessageController {
   public static async getMessageStats(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { conversationId } = req.params;
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
 
       // Verify access
       const conversation = await ConversationModel.findById(conversationId);

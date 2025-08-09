@@ -10,10 +10,9 @@ import { MulterFile } from '../types/multerType.js';
 
 interface AuthenticatedRequest extends Request {
   user?: {
-    userId: string;
+    id: string;
     email: string;
   };
-  files:MulterFile[]
 }
 
 export class MediaController {
@@ -23,7 +22,7 @@ export class MediaController {
   public static async uploadFiles(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { conversationId } = req.params;
-      const userId = req.user!.userId;
+      const userId = req.user?.id as string;
       const files = req.files as MulterFile[];
 
       if (!files || files.length === 0) {
@@ -106,7 +105,7 @@ export class MediaController {
   public static async getMediaFiles(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { conversationId } = req.params;
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
       const { type, page = 1, limit = 20 } = req.query;
       const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
@@ -183,7 +182,7 @@ export class MediaController {
   public static async deleteFile(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { conversationId, fileKey } = req.params;
-      const userId = req.user!.userId;
+      const userId = req.user?.id;
 
       // Verify conversation access
       const conversation = await ConversationModel.findById(conversationId);

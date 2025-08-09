@@ -6,7 +6,7 @@ import { AppError } from '../utils/AppError.js';
 // Extend Request interface
 interface AuthenticatedRequest extends Request {
   user?: {
-    userId: string;
+    id: string;
     email: string;
     role?: string | undefined;
   };
@@ -104,7 +104,7 @@ export const authMiddleware = async (
 
       // Set user info and continue
       req.user = {
-        userId,
+        id: userId,
         email: decoded.email,
         role: decoded.role
       };
@@ -178,7 +178,7 @@ export const simpleAuthMiddleware = async (
     }
 
     req.user = {
-      userId,
+      id:userId,
       email: decoded.email,
       role: decoded.role
     };
@@ -225,7 +225,7 @@ export const optionalAuthMiddleware = async (
         
         if (userId) {
           req.user = {
-            userId,
+            id:userId,
             email: decoded.email,
             role: decoded.role
           };

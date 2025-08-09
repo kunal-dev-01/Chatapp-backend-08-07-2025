@@ -18,14 +18,14 @@ router.use(authMiddleware);
  * @desc    Send a new message
  * @access  Private
  */
-router.post('/', upload.array('files', 10), MessageController.sendMessage
+router.post('/', upload.array('files', 10), MessageController.sendMessage);
 
 /**
  * @route   GET /api/v1/messages/:conversationId/search
  * @desc    Search messages in a conversation
  * @access  Private
  */
-router.get('/:conversationId/search', (MessageController.searchMessages))
+router.get('/:conversationId/search', MessageController.searchMessages)
 
 /**
  * @route   GET /api/v1/messages/:conversationId/stats
