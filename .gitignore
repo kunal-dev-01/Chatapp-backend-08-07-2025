@@ -54,3 +54,5 @@ test-connection
 
 # Ignore specific files or directories
 docker-compose.dev.yml
+docker-compose.prod.yml
+docker-compose.yml
